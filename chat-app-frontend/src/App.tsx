@@ -1,34 +1,112 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useState, useEffect, useRef } from "react"
+import * as signalR from "@microsoft/signalr"
+import DOMPurify from "dompurify"
+import type { ChatMessage } from "./types/ChatMessage"
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [connection, setConnection] = useState<signalR.HubConnection | null>(null)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [user, setUser] = useState("")
+  const [message, setMessage] = useState("")
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    // connect to backend
+    const conn = new signalR.HubConnectionBuilder()
+      .withUrl("https://localhost:7176/chathub")
+      .withAutomaticReconnect()
+      .build();
+
+    const startConnection = async () => {
+      try {
+        await conn.start();
+        console.log("Connected to hub");
+      } catch (err) {
+        console.error("SignalR error:", err);
+      }
+    };
+
+    // sanitize the messages
+    conn.on("ReceiveMessage", (u: string, msg: string) => {
+      const safeUser = DOMPurify.sanitize(u);
+      const safeMsg = DOMPurify.sanitize(msg);
+      setMessages(prev => [...prev, { user: safeUser, message: safeMsg }]);
+    });
+
+    startConnection();
+
+    setConnection(conn);
+
+    // stop connection when unmounting
+    return () => {
+      conn.stop().catch(err => console.error("Error stopping connection:", err));
+    };
+  }, []);
+
+
+  // scroll to end of chat
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
+    }
+  }, [messages])
+
+
+  async function sendMessage() {
+    if (connection && message && user) {
+      try {
+        await connection.invoke("SendMessage", user, message)
+        setMessage("")
+      } catch (err) {
+        console.error("Send error:", err)
+      }
+    }
+  }
+
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <main>
+      <div className="messages">
+        {messages && messages.length <= 0 &&
+          <small className="no-messages">No messages yet</small>
+        }
+
+        {messages.length > 0 && messages.map((m) => (
+          <div className={`bubble ${m.user === user && "bubble-sent"}`}>
+            <small className="bubble-name">{m.user}</small>
+            <div className="bubble-message">{m.message}</div>
+          </div>
+        ))}
+
+        <div ref={messagesEndRef} />
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
+
+      <div className="inputs">
+        <input
+          type="text"
+          placeholder="Name"
+          value={user}
+          onChange={e => setUser(e.target.value)}
+          name="Name"
+        />
+
+        <input
+          type="text"
+          placeholder="Message"
+          value={message}
+          onChange={e => setMessage(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") sendMessage() }}
+          name="message"
+        />
+
+        <button
+          onClick={sendMessage}
+          disabled={user == "" || message == "" ? true : false}
+        >
+          Send
         </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
       </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    </main>
   )
 }
 
