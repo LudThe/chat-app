@@ -2,22 +2,43 @@ using chat_app_backend.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// HTTP & HTTPS
+if (builder.Environment.IsDevelopment())
+{
+    builder.WebHost.ConfigureKestrel(options =>
+    {
+        options.ListenAnyIP(5135);
+        options.ListenAnyIP(7176, listenOptions =>
+        {
+            listenOptions.UseHttps();
+        });
+    });
+}
+
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
 
-builder.Services.AddCors(x => x.AddPolicy("AllowAll", p =>
-{ p.SetIsOriginAllowed(_ => true).AllowAnyHeader().AllowAnyMethod().AllowCredentials(); }));
+// CORS
+builder.Services.AddCors(options =>
+    {
+        options.AddPolicy("AllowSpecificOrigin", builder =>
+        {
+            builder.WithOrigins("http://localhost:5173", "https://localhost:5173")
+                    .AllowAnyHeader()
+                    .AllowAnyMethod()
+                    .AllowCredentials(); ;
+        });
+    });
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
 app.UseHttpsRedirection();
-app.UseCors("AllowAll");
+app.UseCors("AllowSpecificOrigin");
 
 app.MapHub<ChatHub>("/chathub");
 

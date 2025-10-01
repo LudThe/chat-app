@@ -71,8 +71,8 @@ function App() {
           <small className="no-messages">No messages yet</small>
         }
 
-        {messages.length > 0 && messages.map((m) => (
-          <div className={`bubble ${m.user === user && "bubble-sent"}`}>
+        {messages.length > 0 && messages.map((m, i) => (
+          <div key={i} className={`bubble ${m.user === user && "bubble-sent"}`}>
             <small className="bubble-name">{m.user}</small>
             <div className="bubble-message">{m.message}</div>
           </div>
